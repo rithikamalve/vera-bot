@@ -30,7 +30,7 @@ Taboos: {', '.join(voice.get('taboos', voice.get('vocab_taboo', [])))}
 Peer stats: avg_rating={peer_stats.get('avg_rating', 'N/A')}, avg_ctr={peer_stats.get('avg_ctr', 'N/A')}, scope="{peer_stats.get('scope', '')}"
 
 Digest items (top 2):
-{chr(10).join(f'- [{d.get("source", "")}] {d.get("title", "")}' for d in relevant_digest) if relevant_digest else '- (none)'}
+{chr(10).join(f'- [{d.get("source", "")}] {d.get("title", "")}{(" | trial_n=" + str(d["trial_n"])) if d.get("trial_n") else ""}{(" | patient_segment=" + d["patient_segment"]) if d.get("patient_segment") else ""}{(" | summary: " + d["summary"]) if d.get("summary") else ""}' for d in relevant_digest) if relevant_digest else '- (none)'}
 
 Seasonal beats (current month: {current_month}):
 {chr(10).join(f'- {b.get("month", "")}: {b.get("note", "")}' for b in relevant_beats) if relevant_beats else '- (none this month)'}

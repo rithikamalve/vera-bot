@@ -26,7 +26,8 @@ VOICE BY CATEGORY:
 CTA RULES (CRITICAL):
 
 * Exactly ONE CTA per message. Never two.
-* Action triggers (perf_dip, recall_due, campaign): use binary YES/STOP or Reply 1/2 for booking
+* recall_due with available_slots in payload: ALWAYS use cta="reply_1_2" and end with "Reply 1 for [slot1], Reply 2 for [slot2]"
+* Action triggers (perf_dip, campaign, renewal_due): use binary yes_stop
 * Info triggers (research_digest, trend_signal): use open-ended ("Want me to pull the full abstract?")
 * Pure info with no ask: cta = "none"
 * CTA must be the LAST sentence.
