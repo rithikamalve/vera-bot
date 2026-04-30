@@ -140,11 +140,11 @@ Consent scope: {consent.get('scope', [])}
     # Trigger-kind routing: tell the model what to lead with
     kind = trigger.get('kind', '')
     kind_instruction = {
-        'research_digest':      'Lead with the specific research finding (title, source, trial size if available). Do NOT open with CTR or performance metrics.',
+        'research_digest':      'Lead with the specific research finding. Quote the exact numbers from the digest title (percentages, trial_n, patient_segment) — do not paraphrase them. Cite source at the end. Do NOT open with CTR or performance metrics.',
         'regulation_change':    'Lead with the compliance deadline and what specifically changed. Be precise about dates and requirements.',
         'perf_dip':             'Lead with the exact metric drop (use the "Metric delta" percentage above — e.g. -50%, not -0.50%). Name the specific metric (calls, views, CTR).',
         'perf_spike':           'Lead with the positive number and frame it as momentum to act on now.',
-        'recall_due':           'Send as the merchant to the customer. Focus on their recall due date and available slots. Do NOT mention CTR, peer stats, or any internal clinic metrics.',
+        'recall_due':           'Send as the merchant to the customer. State their recall is due, name the available slots from the payload, state the price from active offers. Do NOT include any research findings, clinical statistics, or internal metrics (CTR, peer median). No preamble.',
         'festival_upcoming':    'Lead with the festival name and days remaining. Connect to a specific offer or service.',
         'ipl_match_today':      'Check is_weeknight in the payload. If false (weekend), advise skipping the promo (IPL weekends shift footfall to home). If true, recommend a targeted offer.',
         'curious_ask_due':      'Ask a single short question about what service is most in demand this week. Offer to turn the answer into a Google post or WhatsApp reply.',
@@ -154,7 +154,7 @@ Consent scope: {consent.get('scope', [])}
         'dormant_with_vera':    'Short re-engagement. Reference something specific from their data. Single easy ask.',
         'competitor_opened':    'Name the proximity and what it means for their GBP visibility. Curiosity hook.',
         'milestone_reached':    'Celebrate the specific number. Connect to a next milestone or action.',
-        'wedding_package_followup': 'Reference the trial date and days to wedding. Focus on the next concrete step (skin prep, booking). Do NOT push generic haircut/hair spa offers.',
+        'wedding_package_followup': 'Reference the trial date and exact days to wedding. Name the next concrete step (skin prep program). No preamble ("We hope you\'re doing great" etc). Do NOT push generic haircut/hair spa offers. End with a single binary booking ask.',
     }.get(kind, 'Lead with the most specific and verifiable fact from the trigger payload.')
 
     task_section = f"""### TASK
