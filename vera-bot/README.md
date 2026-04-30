@@ -2,23 +2,33 @@
 
 ## Approach
 
-**Trigger-routed prompt templates**: Every composed message starts from the trigger kind. The trigger determines the CTA shape, the urgency framing, and which compulsion levers get priority. A `research_digest` trigger gets an open-ended curiosity CTA; a `recall_due` trigger gets a binary `Reply 1/2` booking slot.
+**Trigger-routed composition**: Every message starts from the trigger kind. The kind determines the leading signal, the CTA shape, the compulsion lever, and what context to block. A `research_digest` trigger quotes exact numbers from the digest title and uses a curiosity CTA. A `recall_due` trigger sends as the merchant to the customer, uses available slot times from the payload, and ends with "Reply 1 / Reply 2". A `seasonal_perf_dip` with `is_expected_seasonal: true` frames the dip as normal and suggests a countermeasure — it does not alarm. Each of the 27 trigger kinds in the expanded dataset has a specific routing instruction.
 
-**Signal extraction before LLM call**: `extract_facts()` in `composer.py` pre-computes 7 scoreable facts (CTR gap vs peer, top digest item, active offer, lapsed patient count, months since last visit, seasonal beat, top trend signal) *before* the LLM call. This keeps the prompt concrete and prevents the model from fabricating numbers — it only has real numbers to work with.
+**Context isolation rule**: For non-research triggers, a hard isolation rule blocks the LLM from referencing category digest items, research papers, or clinical statistics. This prevents a common failure mode where renewal or perf_dip messages bleed in irrelevant research findings. Research triggers have the inverse rule: all numbers must come verbatim from the digest item.
 
-**Post-LLM validation**: `validators.py` enforces structural correctness (valid CTA enum, no taboo words, no repeat body, not too many CTA phrases) after every LLM response. Invalid outputs surface as errors rather than silent bad messages.
+**Signal extraction before the LLM call**: `extract_facts()` pre-computes 7 facts (CTR gap vs peer, top digest item, active offer, lapsed count, months since last visit, seasonal beat, top trend signal) before the prompt is built. The LLM only sees verified numbers — it has nothing to fabricate.
 
-**Conversation FSM**: `fsm.py` classifies each merchant reply (auto_reply, intent_yes, intent_no, question, hostile, neutral) and routes accordingly. Auto-replies get one soft nudge, then a graceful exit. Explicit YES routes directly to action/confirmation mode without re-pitching. 3+ unanswered neutral turns exit cleanly.
+**Compulsion enforcement**: Every compose call requires the model to name and apply one lever from: specificity, loss_aversion, social_proof, effort_externalization, curiosity, reciprocity, binary_commit. This is a hard instruction in the task section, not a suggestion. The lever named appears in the rationale field of every output.
+
+**Post-LLM validation**: `validators.py` enforces structural correctness after every LLM response — valid CTA enum, no taboo words for the merchant's category, no verbatim repeat of a prior message body, no double CTA phrases.
+
+**Conversation FSM**: `fsm.py` classifies each merchant reply into one of six states: auto_reply, intent_yes, intent_no, question, hostile, neutral. Auto-replies are detected via WhatsApp Business phrase patterns on turn 1, then by repeated message content. They get one soft nudge ("Looks like an auto-reply — reply YES when you're free") then a graceful exit. Explicit YES routes to `intent_yes_followthrough` — no re-pitching, no re-quoting CTR. Hostile messages end immediately.
+
+**Parallel tick execution**: The `/v1/tick` endpoint runs in two passes. Pass 1 selects candidates via fast in-memory checks (expiry, suppression, merchant/category/customer lookup, active conversation window). Pass 2 runs all LLM calls concurrently via `asyncio.gather`. 20 sequential LLM calls at ~3s each would be 60s (timeout). Parallel execution brings it to ~3s total.
 
 ## Model
 
-**Groq `llama-3.3-70b-versatile` at temperature=0** — fast inference, deterministic output, strong instruction-following for structured JSON generation.
+**GPT-4o-mini (primary) / Groq llama-3.3-70b-versatile (fallback)** at `temperature=0` — deterministic output, strong structured JSON generation. Primary model is OpenAI GPT-4o-mini; Groq is the fallback if OpenAI fails.
 
-## Key design decisions
+## Tradeoffs
 
-- **Why trigger routing matters**: Different triggers require fundamentally different message shapes. A generic "prompt with all context" produces mediocre output for every trigger; a trigger-specific template hits the right lever for the right moment.
-- **Why fact extraction happens before LLM**: LLMs hallucinate when asked to compute (CTR gap arithmetic, months-since-date) inside the generation. Pre-computing grounds the prompt in verified numbers.
-- **How auto-reply detection works**: The store tracks the last 3 merchant turns. If the same message string appears in prior turns from the same party, it's flagged as auto-reply. Two detections in one conversation → graceful exit.
+**Why GPT-4o-mini over a larger model**: Latency. With 20 parallel tick calls, a slower model pushes total tick time toward the 30s timeout. GPT-4o-mini at ~2-3s per call fits cleanly. Quality tradeoff is mitigated by the structured prompt: the model doesn't need to reason freely — it follows per-kind routing instructions with pre-computed facts.
+
+**Why trigger routing matters**: A generic "here's all the context, write a message" prompt produces mediocre output for every trigger kind. Trigger-specific instructions hit the right signal at the right moment: a `gbp_unverified` trigger leads with the 30% visibility uplift, not CTR. A `supply_alert` names the batch numbers and demands immediate action, not a soft ask.
+
+**Why fact extraction precedes the LLM**: LLMs hallucinate when asked to compute inside generation (CTR gap arithmetic, months-since-date, delta percentages). Pre-computing grounds the prompt in verified numbers. `-0.50` as a delta renders as `-50%` in the prompt — the model never sees the raw float.
+
+**In-memory store tradeoff**: Fastest possible context retrieval, zero dependencies. The cost is that a server restart loses all context. Mitigated by Render's "Always On" setting and a healthz cron ping during the evaluation window.
 
 ## Run locally
 
@@ -26,21 +36,20 @@
 cd vera-bot
 pip install -r requirements.txt
 cp .env.example .env
-# edit .env — set GROQ_API_KEY
+# set OPENAI_API_KEY and GROQ_API_KEY in .env
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
 
-Test:
 ```bash
 curl http://localhost:8080/v1/healthz
 curl http://localhost:8080/v1/metadata
 ```
 
-## Deploy with Docker
+## Deploy
 
 ```bash
 docker build -t vera-bot .
 docker run -p 8080:8080 --env-file .env vera-bot
 ```
 
-One-click: push the image to Railway or Render, set `GROQ_API_KEY` as an env var, expose port 8080.
+Deployed on Render. Set `OPENAI_API_KEY`, `GROQ_API_KEY`, `TEAM_NAME`, `TEAM_EMAIL` as environment variables. Port 8080.
