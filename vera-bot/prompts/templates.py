@@ -131,10 +131,11 @@ Consent scope: {consent.get('scope', [])}
     scope = trigger.get("scope", "merchant")
     scope_note = "Send as vera (merchant-facing)" if scope == "merchant" else "Send as merchant_on_behalf (customer-facing)"
     first_msg_note = (
-        "This is the FIRST message in this conversation — use WhatsApp template style "
-        "(introduce Vera if vera scope, introduce clinic if merchant_on_behalf scope)."
+        "This is the FIRST message. Lead with the hook immediately — do NOT use a standalone greeting sentence. "
+        "If vera scope, weave identity into the hook in one sentence: 'Vera here — [hook].' or just start with the hook. "
+        "If merchant_on_behalf scope, identify the clinic name and hook in one sentence."
         if len(conversation_history) == 0
-        else "NOT the first message — do NOT re-introduce Vera."
+        else "NOT the first message — do NOT re-introduce Vera. Jump straight to the point."
     )
 
     # Trigger-kind routing: tell the model what to lead with
@@ -160,7 +161,7 @@ Consent scope: {consent.get('scope', [])}
         'wedding_package_followup': 'Reference the trial date and exact days to wedding. Name the next concrete step (skin prep program). No preamble ("We hope you\'re doing great" etc). Do NOT push generic haircut/hair spa offers. End with a single binary booking ask.',
         # Expanded trigger kinds from the full dataset
         'active_planning_intent':   'Merchant expressed intent on the topic in the payload. Build directly on their last message — skip the re-pitch entirely. State in one sentence exactly what you are drafting or building for them right now. Keep to 2 sentences max. yes/stop CTA.',
-        'seasonal_perf_dip':        'Check is_expected_seasonal in the payload. If true, frame the dip as a known seasonal pattern (name the season_note), then suggest one proactive action to counter it — do NOT alarm them. If false, treat as a real perf_dip: lead with exact metric and percentage drop.',
+        'seasonal_perf_dip':        'Check is_expected_seasonal in the payload. If true, frame the dip as a known seasonal pattern (name the season_note), suggest one proactive action to counter it — do NOT alarm them, do NOT mention CTR or peer metrics, keep the entire message focused on the seasonal pattern and one concrete action. If false, treat as a real perf_dip: lead with exact metric and percentage drop.',
         'customer_lapsed_hard':     'Send as merchant to customer. State exactly how many days since their last visit (days_since_last_visit from payload). Reference their previous focus. Name the active offer price. Single yes/stop CTA. No preamble.',
         'trial_followup':           'Send as merchant to customer. Reference the trial date from the payload. Name the next available session using the label field from next_session_options. Single booking CTA.',
         'supply_alert':             'Lead with the specific molecule and affected batch numbers from the payload. Name the manufacturer. State the immediate action the merchant must take (check stock, quarantine affected batches, notify patients on this molecule). Urgency is high — no soft language. yes/stop CTA.',
@@ -190,6 +191,13 @@ Consent scope: {consent.get('scope', [])}
             "All numbers must come verbatim from the digest item — do not round or paraphrase."
         )
 
+    merchant_langs = identity.get('languages', [])
+    lang_directive = (
+        "LANGUAGE: Hindi-English code-mix is MANDATORY for this merchant. Every sentence must blend both. Do not write English-only."
+        if 'hi' in merchant_langs
+        else "LANGUAGE: English."
+    )
+
     task_section = f"""### TASK
 Based on ALL the above, compose the next Vera message.
 
@@ -200,6 +208,8 @@ Scope: {scope} — {scope_note}
 TRIGGER ROUTING INSTRUCTION: {kind_instruction}
 
 {isolation_rule}
+
+{lang_directive}
 
 COMPULSION REQUIREMENT: You MUST apply exactly one lever from this list and name it in your rationale: specificity | loss_aversion | social_proof | effort_externalization | curiosity | reciprocity | binary_commit
 

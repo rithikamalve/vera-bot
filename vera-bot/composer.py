@@ -12,7 +12,8 @@ _groq_client = None
 _openai_client = None
 
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+OPENAI_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "20"))
 
 
 def _get_groq_client() -> Groq:
@@ -127,7 +128,7 @@ def extract_facts(category: dict, merchant: dict, trigger: dict, customer: dict 
 
 
 def _call_llm(user_prompt: str) -> str:
-    # Primary: OpenAI (GPT)
+    # Primary: OpenAI
     openai_client = _get_openai_client()
     if openai_client:
         try:
@@ -139,6 +140,7 @@ def _call_llm(user_prompt: str) -> str:
                 ],
                 max_tokens=600,
                 temperature=0,
+                timeout=OPENAI_TIMEOUT,
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
