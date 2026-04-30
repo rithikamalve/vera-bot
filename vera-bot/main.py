@@ -44,7 +44,7 @@ async def metadata():
         "team_email": TEAM_EMAIL,
         "bot_name": "Vera",
         "version": "1.0.0",
-        "model": "llama-3.3-70b-versatile via Groq",
+        "model": "gpt-4o-mini (primary) / llama-3.3-70b-versatile via Groq (fallback)",
         "description": "Trigger-routed WhatsApp message composer for magicpin merchants",
     }
 
