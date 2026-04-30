@@ -1,5 +1,23 @@
 from datetime import datetime
 
+# Common WhatsApp Business auto-reply phrases — detect on first occurrence
+WA_AUTO_REPLY_PATTERNS = [
+    "thank you for contacting",
+    "thanks for contacting",
+    "team will respond",
+    "team will get back",
+    "our team will",
+    "automated message",
+    "automated reply",
+    "auto-reply",
+    "autoresponder",
+    "i am currently away",
+    "i'm currently away",
+    "currently unavailable",
+    "unable to respond",
+    "out of office",
+]
+
 INTENT_YES_TOKENS = [
     "yes", "ok", "okay", "go ahead", "karo", "haan", "bilkul", "sure",
     "let's do it", "chalega", "theek hai", "let us do it", "lets do it",
@@ -28,6 +46,9 @@ class ConversationFSM:
         msg = merchant_message.strip()
         msg_lower = msg.lower()
 
+        # Pattern-based detection: known WA Business auto-reply phrases → detect on turn 1
+        if any(p in msg_lower for p in WA_AUTO_REPLY_PATTERNS):
+            return "auto_reply"
         # Cross-conversation auto-reply: same message sent 2+ times by this merchant
         if merchant_id and store.get_merchant_message_count(merchant_id, msg) >= 2:
             return "auto_reply"
@@ -107,40 +128,16 @@ class ConversationFSM:
                     "rationale": "Detected WA Business auto-reply twice; exiting gracefully",
                 }
 
-            # 1st confirmed auto-reply (cross-conv count == 2): one targeted soft nudge
-            trigger_payload = {
-                "id": f"nudge_{conversation_id}",
-                "scope": "merchant",
-                "kind": "auto_reply_nudge",
-                "source": "internal",
-                "payload": {
-                    "merchant_id": merchant_payload.get("merchant_id", ""),
-                    "extra_instruction": (
-                        "Merchant may be on WA Business auto-reply. "
-                        "Try a shorter direct question to prompt a real reply from the owner. "
-                        "Keep it under 2 sentences."
-                    ),
-                },
-                "urgency": 2,
-                "suppression_key": f"nudge:{conversation_id}",
-                "expires_at": "",
+            # 1st confirmed auto-reply: one short targeted nudge for the owner (hardcoded, not composed —
+            # the LLM ignores extra_instruction and generates full CTR content instead)
+            owner = merchant_payload.get("identity", {}).get("owner_first_name", "")
+            name_part = f" {owner}" if owner else ""
+            return {
+                "action": "send",
+                "body": f"Looks like an auto-reply 😊 When you're free{name_part}, just reply YES and I'll pick up from where we left off.",
+                "cta": "yes_stop",
+                "rationale": "Detected WA Business auto-reply pattern; one short prompt to reach the real owner.",
             }
-            try:
-                result = compose_fn(category_payload, merchant_payload, trigger_payload, None, history)
-                return {
-                    "action": "send",
-                    "body": result.get("body", ""),
-                    "cta": result.get("cta", "none"),
-                    "rationale": result.get("rationale", ""),
-                }
-            except Exception:
-                return {
-                    "action": "wait",
-                    "body": "",
-                    "cta": "none",
-                    "rationale": "auto-reply detected; waiting for real owner",
-                    "wait_seconds": 3600,
-                }
 
         # --- Bug 2: Intent YES — forward-action, no re-pitch ---
         if classification == "intent_yes":
