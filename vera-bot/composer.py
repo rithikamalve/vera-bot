@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 from datetime import datetime
 
 from groq import Groq
@@ -7,17 +8,29 @@ from groq import Groq
 from prompts.base import SYSTEM_PROMPT
 from prompts.templates import get_user_prompt
 
-_client = None
+_groq_client = None
+_openai_client = None
+
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
 
 
-def _get_client() -> Groq:
-    global _client
-    if _client is None:
-        _client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    return _client
+def _get_groq_client() -> Groq:
+    global _groq_client
+    if _groq_client is None:
+        _groq_client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    return _groq_client
 
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
+def _get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        key = os.environ.get("OPENAI_API_KEY")
+        if not key:
+            return None
+        from openai import OpenAI
+        _openai_client = OpenAI(api_key=key)
+    return _openai_client
 
 
 def extract_facts(category: dict, merchant: dict, trigger: dict, customer: dict | None) -> dict:
@@ -113,9 +126,26 @@ def extract_facts(category: dict, merchant: dict, trigger: dict, customer: dict 
     return facts
 
 
-def _call_groq(user_prompt: str) -> str:
-    client = _get_client()
-    response = client.chat.completions.create(
+def _call_llm(user_prompt: str) -> str:
+    # Primary: OpenAI (GPT)
+    openai_client = _get_openai_client()
+    if openai_client:
+        try:
+            response = openai_client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                max_tokens=600,
+                temperature=0,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"[WARN] OpenAI failed, falling back to Groq: {e}", file=sys.stderr)
+
+    # Fallback: Groq
+    response = _get_groq_client().chat.completions.create(
         model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -147,7 +177,7 @@ def compose(
         facts,
     )
 
-    raw = _call_groq(user_prompt)
+    raw = _call_llm(user_prompt)
 
     # Strip markdown fences if model added them
     if raw.startswith("```"):
@@ -161,7 +191,7 @@ def compose(
     except json.JSONDecodeError:
         # Retry once with explicit JSON instruction
         retry_prompt = user_prompt + "\n\nIMPORTANT: Return ONLY valid JSON, no markdown, no explanation."
-        raw2 = _call_groq(retry_prompt)
+        raw2 = _call_llm(retry_prompt)
         if raw2.startswith("```"):
             raw2 = raw2.split("```")[1]
             if raw2.startswith("json"):
