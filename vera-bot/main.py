@@ -124,7 +124,10 @@ async def tick(request: Request):
                 continue
 
             # Get merchant
-            merchant_id = trigger_payload.get("payload", {}).get("merchant_id", "")
+            merchant_id = (
+                trigger_payload.get("merchant_id", "")
+                or trigger_payload.get("payload", {}).get("merchant_id", "")
+            )
             if not merchant_id:
                 continue
             merchant_payload = store.get("merchant", merchant_id)
