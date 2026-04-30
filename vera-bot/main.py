@@ -1,6 +1,7 @@
 import sys
 import time
 import os
+import asyncio
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -98,17 +99,16 @@ async def tick(request: Request):
         except Exception:
             now_dt = datetime.now(timezone.utc)
 
-        actions = []
-
+        # Pass 1: candidate selection — fast in-memory checks, no LLM calls
+        candidates = []
         for trigger_id in available_triggers:
-            if len(actions) >= 20:
+            if len(candidates) >= 20:
                 break
 
             trigger_payload = store.get("trigger", trigger_id)
             if not trigger_payload:
                 continue
 
-            # Check expiry
             expires_at = trigger_payload.get("expires_at", "")
             if expires_at:
                 try:
@@ -118,12 +118,10 @@ async def tick(request: Request):
                 except Exception:
                     pass
 
-            # Check suppression
             suppression_key = trigger_payload.get("suppression_key", "")
             if suppression_key and store.is_suppressed(suppression_key):
                 continue
 
-            # Get merchant
             merchant_id = (
                 trigger_payload.get("merchant_id", "")
                 or trigger_payload.get("payload", {}).get("merchant_id", "")
@@ -134,7 +132,6 @@ async def tick(request: Request):
             if not merchant_payload:
                 continue
 
-            # Get category
             category_slug = merchant_payload.get("category_slug") or merchant_payload.get("identity", {}).get("category")
             if not category_slug:
                 continue
@@ -142,13 +139,9 @@ async def tick(request: Request):
             if not category_payload:
                 continue
 
-            # Get customer if present
             customer_id = trigger_payload.get("customer_id") or trigger_payload.get("payload", {}).get("customer_id")
-            customer_payload = None
-            if customer_id:
-                customer_payload = store.get("customer", customer_id)
+            customer_payload = store.get("customer", customer_id) if customer_id else None
 
-            # Check if conversation already active for this merchant (last vera turn within 300s)
             already_active = False
             all_convs = store.get_all_conversations()
             for conv_id, turns in all_convs.items():
@@ -157,9 +150,7 @@ async def tick(request: Request):
                 conv_merchant_id = conv_id.split("_")[1] if "_" in conv_id else ""
                 if conv_merchant_id != merchant_id:
                     continue
-                last_vera = next(
-                    (t for t in reversed(turns) if t.get("from") == "vera"), None
-                )
+                last_vera = next((t for t in reversed(turns) if t.get("from") == "vera"), None)
                 if last_vera:
                     try:
                         ts = datetime.fromisoformat(last_vera["ts"].replace("Z", "+00:00"))
@@ -172,40 +163,63 @@ async def tick(request: Request):
                 continue
 
             conversation_id = f"conv_{merchant_id}_{trigger_id}"
-            conv_history = store.get_history(conversation_id)
+            candidates.append({
+                "trigger_id": trigger_id,
+                "trigger_payload": trigger_payload,
+                "merchant_payload": merchant_payload,
+                "merchant_id": merchant_id,
+                "category_payload": category_payload,
+                "customer_payload": customer_payload,
+                "customer_id": customer_id,
+                "suppression_key": suppression_key,
+                "conversation_id": conversation_id,
+                "conv_history": store.get_history(conversation_id),
+            })
 
+        # Pass 2: parallel LLM calls — all candidates composed concurrently
+        async def compose_one(c):
             try:
-                output = compose(category_payload, merchant_payload, trigger_payload, customer_payload, conv_history)
-                validate(output, merchant_payload, category_payload, conv_history)
+                output = await asyncio.to_thread(
+                    compose,
+                    c["category_payload"], c["merchant_payload"],
+                    c["trigger_payload"], c["customer_payload"], c["conv_history"],
+                )
+                validate(output, c["merchant_payload"], c["category_payload"], c["conv_history"])
+                return c, output
             except Exception as e:
-                print(f"[ERROR] tick compose/validate for {trigger_id}: {e}", file=sys.stderr)
+                print(f"[ERROR] tick compose/validate for {c['trigger_id']}: {e}", file=sys.stderr)
+                return c, None
+
+        results = await asyncio.gather(*[compose_one(c) for c in candidates])
+
+        # Pass 3: commit suppressions and conversation turns, build action list
+        actions = []
+        for c, output in results:
+            if output is None:
                 continue
 
-            # Suppress
-            if suppression_key:
-                store.suppress(suppression_key)
+            if c["suppression_key"]:
+                store.suppress(c["suppression_key"])
 
-            # Record vera turn
-            vera_turn = {
+            store.add_turn(c["conversation_id"], {
                 "from": "vera",
                 "body": output.get("body", ""),
                 "ts": now_dt.isoformat().replace("+00:00", "Z"),
-                "turn_number": len(conv_history) + 1,
-            }
-            store.add_turn(conversation_id, vera_turn)
+                "turn_number": len(c["conv_history"]) + 1,
+            })
 
-            merchant_name = merchant_payload.get("identity", {}).get("name", merchant_id)
+            merchant_name = c["merchant_payload"].get("identity", {}).get("name", c["merchant_id"])
             actions.append({
-                "conversation_id": conversation_id,
-                "merchant_id": merchant_id,
-                "customer_id": customer_id,
+                "conversation_id": c["conversation_id"],
+                "merchant_id": c["merchant_id"],
+                "customer_id": c["customer_id"],
                 "send_as": output.get("send_as", "vera"),
-                "trigger_id": trigger_id,
+                "trigger_id": c["trigger_id"],
                 "template_name": "vera_v1",
-                "template_params": [merchant_name, trigger_payload.get("kind", ""), ""],
+                "template_params": [merchant_name, c["trigger_payload"].get("kind", ""), ""],
                 "body": output.get("body", ""),
                 "cta": output.get("cta", "none"),
-                "suppression_key": output.get("suppression_key", suppression_key),
+                "suppression_key": output.get("suppression_key", c["suppression_key"]),
                 "rationale": output.get("rationale", ""),
             })
 
