@@ -158,7 +158,25 @@ Consent scope: {consent.get('scope', [])}
         'competitor_opened':    'Name the proximity and what it means for their GBP visibility. Curiosity hook.',
         'milestone_reached':    'Celebrate the specific number. Connect to a next milestone or action.',
         'wedding_package_followup': 'Reference the trial date and exact days to wedding. Name the next concrete step (skin prep program). No preamble ("We hope you\'re doing great" etc). Do NOT push generic haircut/hair spa offers. End with a single binary booking ask.',
-    }.get(kind, 'Lead with the most specific and verifiable fact from the trigger payload.')
+    }.get(kind, (
+        'Lead with the most specific and verifiable fact from the trigger payload. '
+        'Do NOT reference category digest items, research papers, or clinical findings. '
+        'Apply one compulsion lever (loss_aversion or specificity). End with a yes/stop CTA.'
+    ))
+
+    # Fix 1: Context isolation — block digest/research bleed for non-research trigger kinds
+    research_kinds = {'research_digest', 'regulation_change', 'trend_signal'}
+    if kind not in research_kinds:
+        isolation_rule = (
+            "ISOLATION RULE: Do NOT reference category digest items, research papers, "
+            "clinical statistics, seasonal beats, or trend signals in this message. "
+            "Pull facts only from the trigger payload and merchant context (offers, performance, customer aggregate)."
+        )
+    else:
+        isolation_rule = (
+            "RESEARCH RULE: Lead with the digest finding. "
+            "All numbers must come verbatim from the digest item — do not round or paraphrase."
+        )
 
     task_section = f"""### TASK
 Based on ALL the above, compose the next Vera message.
@@ -168,6 +186,10 @@ Trigger kind: {kind}
 Scope: {scope} — {scope_note}
 
 TRIGGER ROUTING INSTRUCTION: {kind_instruction}
+
+{isolation_rule}
+
+COMPULSION REQUIREMENT: You MUST apply exactly one lever from this list and name it in your rationale: specificity | loss_aversion | social_proof | effort_externalization | curiosity | reciprocity | binary_commit
 
 Conversation history so far: {len(conversation_history)} turns. {first_msg_note}
 

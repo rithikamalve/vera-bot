@@ -32,9 +32,16 @@ QUESTION_STARTS = ["what", "how", "when", "why", "kya", "kaise", "kab", "kaun", 
 HOSTILE_WORDS = [
     "idiot", "stupid", "bakwas", "bekar", "chutiya", "mc", "bc",
     "fraud", "scam", "fake", "harassment",
-    # extended patterns
-    "spam", "useless", "stop messaging", "don't contact", "remove me",
-    "unsubscribe", "bakwaas", "band karo", "chup", "mat bhejo",
+    # stop-contact variants
+    "spam", "useless", "stop messaging", "stop sending",
+    "don't contact", "dont contact", "don't message", "dont message",
+    "do not contact", "do not message",
+    "remove me", "remove my number", "delete my number",
+    "unsubscribe", "opt out", "please stop",
+    # Hindi/Hinglish
+    "bakwaas", "band karo", "chup", "mat bhejo",
+    "pareshaan mat", "disturb mat", "nahi chahiye",
+    "annoying", "irritating", "leave me alone",
 ]
 
 
