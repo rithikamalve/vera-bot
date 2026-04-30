@@ -49,12 +49,15 @@ Trend signals (top 2):
 
     ctr = performance.get("ctr")
     peer_ctr = peer_stats.get("avg_ctr")
+    # Only show CTR/peer stats for merchant-facing messages — never expose to customers
+    is_customer_scope = trigger.get("scope") == "customer"
     ctr_line = ""
-    if ctr is not None and peer_ctr is not None:
-        gap = round(float(ctr) - float(peer_ctr), 4)
-        ctr_line = f"CTR: {float(ctr)*100:.1f}% | peer median: {float(peer_ctr)*100:.1f}% | gap: {gap*100:+.1f}%"
-    else:
-        ctr_line = f"CTR: {ctr}" if ctr else "CTR: N/A"
+    if not is_customer_scope:
+        if ctr is not None and peer_ctr is not None:
+            gap = round(float(ctr) - float(peer_ctr), 4)
+            ctr_line = f"CTR: {float(ctr)*100:.1f}% | peer median: {float(peer_ctr)*100:.1f}% | gap: {gap*100:+.1f}%"
+        else:
+            ctr_line = f"CTR: {ctr}" if ctr else "CTR: N/A"
 
     last_3 = conversation_history[-3:] if len(conversation_history) >= 3 else conversation_history
     history_str = "\n".join(
@@ -86,13 +89,23 @@ Last 3 conversation turns:
 """
 
     # --- TRIGGER CONTEXT ---
+    # Render delta_pct correctly: -0.50 means -50%, not -0.5%
+    trigger_payload = trigger.get('payload', {})
+    delta_pct_raw = trigger_payload.get('delta_pct')
+    delta_pct_rendered = ""
+    if delta_pct_raw is not None:
+        try:
+            delta_pct_rendered = f"\nMetric delta: {float(delta_pct_raw)*100:+.0f}% (e.g. -0.50 = -50% drop)"
+        except Exception:
+            pass
+
     trigger_section = f"""### TRIGGER CONTEXT
 Kind: {trigger.get('kind', '')}
 Source: {trigger.get('source', '')}
 Urgency: {trigger.get('urgency', '')}
 Expires at: {trigger.get('expires_at', '')}
 Scope: {trigger.get('scope', '')}
-Payload: {trigger.get('payload', {})}
+Payload: {trigger_payload}{delta_pct_rendered}
 
 Extracted facts:
 {chr(10).join(f'- {k}: {v}' for k, v in facts.items() if v is not None)}
@@ -124,12 +137,34 @@ Consent scope: {consent.get('scope', [])}
         else "NOT the first message — do NOT re-introduce Vera."
     )
 
+    # Trigger-kind routing: tell the model what to lead with
+    kind = trigger.get('kind', '')
+    kind_instruction = {
+        'research_digest':      'Lead with the specific research finding (title, source, trial size if available). Do NOT open with CTR or performance metrics.',
+        'regulation_change':    'Lead with the compliance deadline and what specifically changed. Be precise about dates and requirements.',
+        'perf_dip':             'Lead with the exact metric drop (use the "Metric delta" percentage above — e.g. -50%, not -0.50%). Name the specific metric (calls, views, CTR).',
+        'perf_spike':           'Lead with the positive number and frame it as momentum to act on now.',
+        'recall_due':           'Send as the merchant to the customer. Focus on their recall due date and available slots. Do NOT mention CTR, peer stats, or any internal clinic metrics.',
+        'festival_upcoming':    'Lead with the festival name and days remaining. Connect to a specific offer or service.',
+        'ipl_match_today':      'Check is_weeknight in the payload. If false (weekend), advise skipping the promo (IPL weekends shift footfall to home). If true, recommend a targeted offer.',
+        'curious_ask_due':      'Ask a single short question about what service is most in demand this week. Offer to turn the answer into a Google post or WhatsApp reply.',
+        'winback_eligible':     'Lead with what the merchant is missing since their subscription lapsed (lapsed customers added, performance delta). Single binary CTA.',
+        'renewal_due':          'Lead with days remaining and what they risk losing. Not a generic renewal pitch.',
+        'review_theme_emerged': 'Name the specific review theme and occurrence count. Offer a concrete action (response template, operational fix).',
+        'dormant_with_vera':    'Short re-engagement. Reference something specific from their data. Single easy ask.',
+        'competitor_opened':    'Name the proximity and what it means for their GBP visibility. Curiosity hook.',
+        'milestone_reached':    'Celebrate the specific number. Connect to a next milestone or action.',
+        'wedding_package_followup': 'Reference the trial date and days to wedding. Focus on the next concrete step (skin prep, booking). Do NOT push generic haircut/hair spa offers.',
+    }.get(kind, 'Lead with the most specific and verifiable fact from the trigger payload.')
+
     task_section = f"""### TASK
 Based on ALL the above, compose the next Vera message.
 
 Category: {category.get('slug', '')}
-Trigger kind: {trigger.get('kind', '')}
+Trigger kind: {kind}
 Scope: {scope} — {scope_note}
+
+TRIGGER ROUTING INSTRUCTION: {kind_instruction}
 
 Conversation history so far: {len(conversation_history)} turns. {first_msg_note}
 

@@ -23,12 +23,13 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 def extract_facts(category: dict, merchant: dict, trigger: dict, customer: dict | None) -> dict:
     facts = {}
 
-    # 1. CTR gap
+    # 1. CTR gap — only for merchant-facing messages (never expose internal metrics to customers)
+    is_customer_scope = trigger.get("scope") == "customer"
     perf = merchant.get("performance", {})
     peer_stats = category.get("peer_stats", {})
     ctr = perf.get("ctr")
     peer_ctr = peer_stats.get("avg_ctr")
-    if ctr is not None and peer_ctr is not None:
+    if not is_customer_scope and ctr is not None and peer_ctr is not None:
         gap = round(float(ctr) - float(peer_ctr), 4)
         facts["ctr_gap"] = f"{float(ctr)*100:.1f}% vs peer {float(peer_ctr)*100:.1f}% ({gap*100:+.1f}%)"
     else:
