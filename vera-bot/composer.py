@@ -7,6 +7,7 @@ from groq import Groq
 
 from prompts.base import SYSTEM_PROMPT
 from prompts.templates import get_user_prompt
+from validators import validate
 
 _groq_client = None
 _openai_client = None
@@ -177,8 +178,17 @@ _CTA_ACTION_KINDS = {
 _VALID_CTA = {"open_ended", "yes_stop", "none", "reply_1_2"}
 
 
-def _coerce_cta(output: dict, trigger: dict) -> dict:
+def _coerce_output(output: dict, trigger: dict) -> dict:
     kind = trigger.get("kind", "")
+    scope = trigger.get("scope", "merchant")
+
+    # Fix 1: send_as — customer scope must always be merchant_on_behalf
+    if scope == "customer":
+        output["send_as"] = "merchant_on_behalf"
+    elif output.get("send_as") not in ("vera", "merchant_on_behalf"):
+        output["send_as"] = "vera"
+
+    # Fix 2: CTA coercion
     cta = output.get("cta", "")
     if kind in _CTA_FORCED:
         output["cta"] = _CTA_FORCED[kind]
@@ -188,6 +198,19 @@ def _coerce_cta(output: dict, trigger: dict) -> dict:
         output["cta"] = "yes_stop"
     elif cta not in _VALID_CTA:
         output["cta"] = "yes_stop"
+
+    # Fix 3: recall_due body must end with exact slot footer
+    if kind == "recall_due":
+        slots = trigger.get("payload", {}).get("available_slots", [])
+        if len(slots) >= 2:
+            def _slot_label(s):
+                return s if isinstance(s, str) else s.get("label", s.get("time", str(s)))
+            s1, s2 = _slot_label(slots[0]), _slot_label(slots[1])
+            footer = f"Reply 1 for {s1}, Reply 2 for {s2}"
+            body = output.get("body", "").rstrip()
+            if footer not in body:
+                output["body"] = body + f"\n{footer}"
+
     return output
 
 
@@ -252,18 +275,35 @@ def compose(
             raw = raw[4:]
         raw = raw.strip()
 
-    try:
-        result = json.loads(raw)
-    except json.JSONDecodeError:
-        # Retry once with explicit JSON instruction
-        retry_prompt = user_prompt + "\n\nIMPORTANT: Return ONLY valid JSON, no markdown, no explanation."
-        raw2 = _call_llm(retry_prompt)
-        if raw2.startswith("```"):
-            raw2 = raw2.split("```")[1]
-            if raw2.startswith("json"):
-                raw2 = raw2[4:]
-            raw2 = raw2.strip()
-        result = json.loads(raw2)
+    def _parse(text: str) -> dict:
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        return json.loads(text)
 
-    _coerce_cta(result, trigger_payload)
+    try:
+        result = _parse(raw)
+    except json.JSONDecodeError:
+        retry_prompt = user_prompt + "\n\nIMPORTANT: Return ONLY valid JSON, no markdown, no explanation."
+        result = _parse(_call_llm(retry_prompt))
+
+    _coerce_output(result, trigger_payload)
+
+    # Validation retry: if output fails validation, retry once with the error surfaced
+    try:
+        validate(result, merchant_payload, category_payload, conversation_history)
+    except Exception as ve:
+        fix_prompt = (
+            user_prompt
+            + f"\n\nCRITICAL: Your previous output failed validation — {ve}. "
+            "Fix only that issue and return ONLY valid JSON."
+        )
+        try:
+            result = _parse(_call_llm(fix_prompt))
+            _coerce_output(result, trigger_payload)
+        except Exception:
+            pass  # Let the caller's validate() be the final gate
+
     return result
