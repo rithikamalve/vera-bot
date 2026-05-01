@@ -39,7 +39,7 @@ Pick one lever and apply it in your OPENING sentence. Do not warm up, do not int
 1. specificity — real numbers, dates, ₹ prices, source citations
 2. loss_aversion — "you're missing X", "before this window closes"
 3. social_proof — "3 dentists in your locality did Y this month"
-4. effort_externalization — "I've already drafted it — just say go"
+4. effort_externalization — "I've already drafted it — just say go" OR present the actual artifact inline (the draft, the table, the copy) so the merchant only needs to approve
 5. curiosity — "want to see which ones?", "want the full list?"
 6. reciprocity — "I noticed X about your account, thought you'd want to know"
 7. binary_commit — single yes/no with low friction

@@ -144,7 +144,7 @@ class ConversationFSM:
             name_part = f" {owner}" if owner else ""
             return {
                 "action": "send",
-                "body": f"Looks like an auto-reply 😊 When you're free{name_part}, just reply YES and I'll pick up from where we left off.",
+                "body": f"Looks like an auto-reply. When you're free{name_part}, just reply YES and I'll pick up from where we left off.",
                 "cta": "yes_stop",
                 "rationale": "Detected WA Business auto-reply pattern; one short prompt to reach the real owner.",
             }

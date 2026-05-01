@@ -142,15 +142,15 @@ Consent scope: {consent.get('scope', [])}
     kind = trigger.get('kind', '')
     kind_instruction = {
         'research_digest':      'Lead with the specific research finding. Quote the exact numbers from the digest title (percentages, trial_n, patient_segment) — do not paraphrase them. Cite source at the end. Do NOT open with CTR or performance metrics.',
-        'regulation_change':    'Lead with the compliance deadline and what specifically changed. Be precise about dates and requirements. Do NOT reference CTR, peer metrics, or performance data — this is a compliance message only. End with a yes/stop CTA asking if they want help auditing their setup.',
-        'perf_dip':             'Lead with the exact metric drop (use the "Metric delta" percentage above — e.g. -50%, not -0.50%). Name the specific metric (calls, views, CTR). Keep to 2-3 sentences. End with a single yes/stop CTA asking if they want you to act on it. Do NOT list other metrics or offers in the same message.',
+        'regulation_change':    'Lead with the compliance deadline and what specifically changed. Be precise about dates and requirements. Do NOT reference CTR, peer metrics, or performance data — this is a compliance message only. Apply effort_externalization: tell them you have already prepared a compliance checklist or audit draft for their setup. End with a yes/stop CTA asking if they want you to run the audit now.',
+        'perf_dip':             'Lead with the exact metric drop (use the "Metric delta" percentage above — e.g. -50%, not -0.50%). Name the specific metric (calls, views, CTR). Apply effort_externalization: tell them you have already prepared a recovery draft (e.g. "I\'ve already drafted a campaign to address this — takes 10 min to go live"). Keep to 2-3 sentences. End with a single yes/stop CTA. Do NOT list other metrics or offers in the same message.',
         'perf_spike':           'Lead with the positive number and frame it as momentum to act on now.',
         'recall_due':           'Send as the merchant to the customer. State their recall is due, name the available slots from the payload, state the price from active offers. Do NOT include any research findings, clinical statistics, or internal metrics (CTR, peer median). No preamble. End with exactly: "Reply 1 for [slot1], Reply 2 for [slot2]".',
         'festival_upcoming':    'Lead with the festival name and days remaining. Connect to a specific offer or service.',
         'ipl_match_today':      'Check is_weeknight in the payload. If false (weekend), advise skipping the promo (IPL weekends shift footfall to home). If true, recommend a targeted offer.',
-        'curious_ask_due':      'Ask a single short question about what service is most in demand this week. Offer to turn the answer into a Google post or WhatsApp reply.',
-        'winback_eligible':     'Lead with what the merchant is missing since their subscription lapsed (lapsed customers added, performance delta). Single binary CTA.',
-        'renewal_due':          'Lead with days remaining and what they risk losing (visibility, active customers, offers). Not a generic renewal pitch. Do NOT include research findings, clinical studies, digest content, or CTR peer comparisons — those are irrelevant here. End with yes/stop CTA.',
+        'curious_ask_due':      'Ask a single short question about what service is most in demand this week. Include a specific guess based on the merchant\'s active offers or category seasonality (e.g. "Is it the [offer name]?"). Offer to turn the answer into a Google post or WhatsApp broadcast — and add a time-cap anchor ("takes 5 min"). open_ended CTA.',
+        'winback_eligible':     'Lead with what the merchant is missing since their subscription lapsed (lapsed customers added, performance delta). Apply effort_externalization: tell them you have already identified the lapsed segment and prepared a re-engagement draft — they just need to say yes. Include a time-cap anchor ("ready in 5 min"). Single binary yes/stop CTA.',
+        'renewal_due':          'Lead with days remaining and what they risk losing (visibility, active customers, offers). Apply effort_externalization: tell them you have already queued the renewal and it takes 2 minutes to confirm. Do NOT include research findings, clinical studies, digest content, or CTR peer comparisons — those are irrelevant here. End with yes/stop CTA.',
         'review_theme_emerged': 'Name the specific review theme and occurrence count. Offer a concrete action (response template, operational fix).',
         'dormant_with_vera':    'Short re-engagement. Reference something specific from their data. Single easy ask.',
         'intent_yes_followthrough': 'Merchant said YES. Do NOT re-pitch or repeat any stats/CTR/peer metrics. Acknowledge the yes in one short sentence, then state exactly what you are doing for them right now (drafting, scheduling, activating). Be concrete and brief.',
@@ -160,11 +160,11 @@ Consent scope: {consent.get('scope', [])}
         'milestone_reached':    'Celebrate the specific number. Connect to a next milestone or action.',
         'wedding_package_followup': 'Reference the trial date and exact days to wedding. Name the next concrete step (skin prep program). No preamble ("We hope you\'re doing great" etc). Do NOT push generic haircut/hair spa offers. End with a single binary booking ask.',
         # Expanded trigger kinds from the full dataset
-        'active_planning_intent':   'Merchant expressed intent on the topic in the payload. Build directly on their last message — skip the re-pitch entirely. State in one sentence exactly what you are drafting or building for them right now. Keep to 2 sentences max. yes/stop CTA.',
+        'active_planning_intent':   'Merchant expressed intent on the topic in the payload. Build directly on their last message — skip the re-pitch entirely. Apply effort_externalization at maximum: present a COMPLETE drafted artifact inline (e.g. a tiered pricing table, a campaign copy, a menu description — whatever is relevant), not just an offer to draft one. Use real numbers from merchant context (prices, locality names, offer titles). Keep preamble to one short sentence max, then the artifact. yes/stop CTA.',
         'seasonal_perf_dip':        'Check is_expected_seasonal in the payload. If true, frame the dip as a known seasonal pattern (name the season_note), suggest one proactive action to counter it — do NOT alarm them, do NOT mention CTR or peer metrics, keep the entire message focused on the seasonal pattern and one concrete action. If false, treat as a real perf_dip: lead with exact metric and percentage drop.',
-        'customer_lapsed_hard':     'Send as merchant to customer. State exactly how many days since their last visit (days_since_last_visit from payload). Reference their previous focus. Name the active offer price. Single yes/stop CTA. No preamble.',
+        'customer_lapsed_hard':     'Send as merchant to customer. State exactly how many days since their last visit (days_since_last_visit from payload). Reference their previous service focus. Name the active offer price. Use "no judgment" framing — acknowledge the gap without guilt. In the CTA, include "no commitment, no auto-charge" to remove friction. No preamble. Single yes/stop CTA.',
         'trial_followup':           'Send as merchant to customer. Reference the trial date from the payload. Name the next available session using the label field from next_session_options. Single booking CTA.',
-        'supply_alert':             'Lead with the specific molecule and affected batch numbers from the payload. Name the manufacturer. State the immediate action the merchant must take (check stock, quarantine affected batches, notify patients on this molecule). Urgency is high — no soft language. yes/stop CTA.',
+        'supply_alert':             'Lead with the specific molecule and affected batch numbers from the payload. Name the manufacturer. Derive and state the number of affected customers: multiply the affected molecule\'s prevalence against merchant customer_aggregate active_count (e.g. "X of your chronic-Rx customers may be on this"). State the immediate action the merchant must take (check stock, quarantine affected batches, notify patients on this molecule). Urgency is high — no soft language. yes/stop CTA.',
         'chronic_refill_due':       'Send as merchant (pharmacy) to customer. Name the specific medications from molecule_list. State when stock runs out using stock_runs_out_iso. If delivery_address_saved is true, offer home delivery — do NOT invent prices, minimums, or charges not present in active offers. Single yes/stop CTA. No preamble.',
         'category_seasonal':        'Lead with the single highest-demand trend from the trends list (the one with the largest positive delta). Name one concrete shelf or menu action. If shelf_action_recommended is true, make the action specific. yes/stop CTA.',
         'gbp_unverified':           'Lead with the visibility uplift they are missing (estimated_uplift_pct × 100 = percentage). Name the verification method (verification_path). One sentence on what unverified status costs them right now. yes/stop CTA.',
@@ -192,9 +192,16 @@ Consent scope: {consent.get('scope', [])}
         )
 
     merchant_langs = identity.get('languages', [])
+    # For customer-scoped triggers, prefer the customer's language preference
+    is_customer_scope = trigger.get("scope") == "customer"
+    if is_customer_scope and customer:
+        cust_lang_pref = customer.get("identity", {}).get("language_pref", "")
+        use_hindi = 'hi' in cust_lang_pref or 'hi' in merchant_langs
+    else:
+        use_hindi = 'hi' in merchant_langs
     lang_directive = (
-        "LANGUAGE: Hindi-English code-mix is MANDATORY for this merchant. Every sentence must blend both. Do not write English-only."
-        if 'hi' in merchant_langs
+        "LANGUAGE: Hindi-English code-mix is MANDATORY for this recipient. Every sentence must blend both. Do not write English-only."
+        if use_hindi
         else "LANGUAGE: English."
     )
 
