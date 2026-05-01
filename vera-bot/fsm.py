@@ -116,27 +116,30 @@ class ConversationFSM:
         store,
         compose_fn,
         merchant_id: str = "",
+        customer_id: str = "",
+        customer_payload: dict = None,
     ) -> dict:
         classification = self.classify_reply(
             conversation_id, merchant_message, store, merchant_id=merchant_id
         )
         history = store.get_history(conversation_id)
+        is_customer = bool(customer_id)
+        scope = "customer" if is_customer else "merchant"
 
-        # --- Bug 1: Auto-reply detection ---
+        # --- Auto-reply detection ---
         if classification == "auto_reply":
             auto_count = self._count_auto_replies(conversation_id, store, merchant_id=merchant_id)
 
-            # 2nd+ confirmed auto-reply: exit immediately, no further API call
-            if auto_count >= 3:
+            # 2nd confirmed auto-reply: exit immediately
+            if auto_count >= 2:
                 return {
                     "action": "end",
                     "body": "",
                     "cta": "none",
-                    "rationale": "Detected WA Business auto-reply twice; exiting gracefully",
+                    "rationale": "Detected WA Business auto-reply on repetition; exiting gracefully",
                 }
 
-            # 1st confirmed auto-reply: one short targeted nudge for the owner (hardcoded, not composed —
-            # the LLM ignores extra_instruction and generates full CTR content instead)
+            # 1st confirmed auto-reply: one short nudge for the owner
             owner = merchant_payload.get("identity", {}).get("owner_first_name", "")
             name_part = f" {owner}" if owner else ""
             return {
@@ -146,29 +149,27 @@ class ConversationFSM:
                 "rationale": "Detected WA Business auto-reply pattern; one short prompt to reach the real owner.",
             }
 
-        # --- Bug 2: Intent YES — forward-action, no re-pitch ---
+        # --- Intent YES — forward-action, no re-pitch ---
         if classification == "intent_yes":
-            # Inject system hint so the LLM knows not to re-pitch
             modified_history = list(history) + [{
                 "from": "system_hint",
                 "body": (
-                    "Merchant said YES. Move to action/confirmation mode. "
+                    "The person said YES. Move to action/confirmation mode. "
                     "Do NOT re-pitch. Do NOT repeat CTR stats or peer averages. "
-                    "Acknowledge the yes and state the specific next step you are taking for them. "
-                    "Be concrete about what happens next."
+                    "Acknowledge the yes and state the specific next step you are taking. "
+                    "Be concrete about what happens next. "
+                    + ("Address the customer by their first name, not the merchant." if is_customer else "")
                 ),
             }]
             trigger_payload = {
                 "id": f"yes_{conversation_id}",
-                "scope": "merchant",
+                "scope": scope,
                 "kind": "intent_yes_followthrough",
                 "source": "internal",
                 "payload": {
                     "merchant_id": merchant_payload.get("merchant_id", ""),
-                    "extra_instruction": (
-                        "Merchant confirmed YES. Do NOT re-pitch. "
-                        "Move straight to the action step."
-                    ),
+                    "customer_id": customer_id,
+                    "extra_instruction": "Confirmed YES. Move straight to the action step.",
                 },
                 "urgency": 4,
                 "suppression_key": f"yes:{conversation_id}",
@@ -176,7 +177,7 @@ class ConversationFSM:
             }
             try:
                 result = compose_fn(
-                    category_payload, merchant_payload, trigger_payload, None, modified_history
+                    category_payload, merchant_payload, trigger_payload, customer_payload, modified_history
                 )
                 return {
                     "action": "send",
@@ -197,16 +198,16 @@ class ConversationFSM:
                 "action": "end",
                 "body": "",
                 "cta": "none",
-                "rationale": "merchant declined; graceful exit",
+                "rationale": "declined; graceful exit",
             }
 
-        # --- Bug 3: Hostile — end immediately, no API call ---
+        # --- Hostile — end immediately ---
         if classification == "hostile":
             return {
                 "action": "end",
                 "body": "",
                 "cta": "none",
-                "rationale": "Merchant signaled hostility; exiting without escalating",
+                "rationale": "Hostile signal detected; exiting without escalating",
             }
 
         if classification == "neutral":
@@ -216,7 +217,7 @@ class ConversationFSM:
                     "action": "wait",
                     "body": "",
                     "cta": "none",
-                    "rationale": "merchant indicated they will check later; waiting",
+                    "rationale": "indicated they will check later; waiting",
                     "wait_seconds": 3600,
                 }
             turn_count = self._turn_count(conversation_id, store)
@@ -228,16 +229,21 @@ class ConversationFSM:
                     "rationale": "3-strike rule reached; graceful exit",
                 }
 
-        # question or neutral (compose next nudge)
+        # question or neutral — compose next reply
         trigger_payload = {
             "id": f"reply_{conversation_id}",
-            "scope": "merchant",
+            "scope": scope,
             "kind": "follow_up",
             "source": "internal",
             "payload": {
                 "merchant_id": merchant_payload.get("merchant_id", ""),
+                "customer_id": customer_id,
                 "merchant_message": merchant_message,
                 "extra_instruction": (
+                    "Answer the question directly and concisely. Address by first name."
+                    if classification == "question"
+                    else "Continue the conversation naturally. Address by first name."
+                ) if is_customer else (
                     "Merchant asked a question — answer directly and concisely."
                     if classification == "question"
                     else "Continue the conversation naturally."
@@ -248,7 +254,7 @@ class ConversationFSM:
             "expires_at": "",
         }
         try:
-            result = compose_fn(category_payload, merchant_payload, trigger_payload, None, history)
+            result = compose_fn(category_payload, merchant_payload, trigger_payload, customer_payload, history)
             return {
                 "action": "send",
                 "body": result.get("body", ""),

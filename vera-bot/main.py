@@ -263,6 +263,8 @@ async def reply(request: Request):
         if not category_payload:
             category_payload = {}
 
+        customer_payload = store.get("customer", customer_id) if customer_id else None
+
         result = fsm.handle_reply(
             conversation_id,
             message,
@@ -271,6 +273,8 @@ async def reply(request: Request):
             store,
             compose,
             merchant_id=merchant_id,
+            customer_id=customer_id or "",
+            customer_payload=customer_payload,
         )
 
         if result.get("action") == "send" and result.get("body"):

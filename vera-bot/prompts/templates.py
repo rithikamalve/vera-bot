@@ -142,7 +142,7 @@ Consent scope: {consent.get('scope', [])}
     kind = trigger.get('kind', '')
     kind_instruction = {
         'research_digest':      'Lead with the specific research finding. Quote the exact numbers from the digest title (percentages, trial_n, patient_segment) — do not paraphrase them. Cite source at the end. Do NOT open with CTR or performance metrics.',
-        'regulation_change':    'Lead with the compliance deadline and what specifically changed. Be precise about dates and requirements.',
+        'regulation_change':    'Lead with the compliance deadline and what specifically changed. Be precise about dates and requirements. Do NOT reference CTR, peer metrics, or performance data — this is a compliance message only. End with a yes/stop CTA asking if they want help auditing their setup.',
         'perf_dip':             'Lead with the exact metric drop (use the "Metric delta" percentage above — e.g. -50%, not -0.50%). Name the specific metric (calls, views, CTR). Keep to 2-3 sentences. End with a single yes/stop CTA asking if they want you to act on it. Do NOT list other metrics or offers in the same message.',
         'perf_spike':           'Lead with the positive number and frame it as momentum to act on now.',
         'recall_due':           'Send as the merchant to the customer. State their recall is due, name the available slots from the payload, state the price from active offers. Do NOT include any research findings, clinical statistics, or internal metrics (CTR, peer median). No preamble. End with exactly: "Reply 1 for [slot1], Reply 2 for [slot2]".',
