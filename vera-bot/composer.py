@@ -12,7 +12,7 @@ _groq_client = None
 _openai_client = None
 
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1")
 OPENAI_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "20"))
 
 
@@ -124,7 +124,71 @@ def extract_facts(category: dict, merchant: dict, trigger: dict, customer: dict 
     else:
         facts["top_trend_signal"] = None
 
+    # 8. Pre-formatted citation for research/regulation triggers
+    kind = trigger.get("kind", "")
+    digest = category.get("digest", [])
+    top_item_id = trigger.get("payload", {}).get("top_item_id")
+    top_digest = None
+    if top_item_id:
+        top_digest = next((d for d in digest if d.get("id") == top_item_id), None)
+    if top_digest is None and digest:
+        top_digest = digest[0]
+    if kind in ("research_digest", "regulation_change") and top_digest:
+        source = top_digest.get("source", "")
+        title = top_digest.get("title", "")
+        page = top_digest.get("page", "")
+        citation = f"[{source}] {title}"
+        if page:
+            citation += f", p.{page}"
+        facts["formatted_citation"] = citation
+    else:
+        facts["formatted_citation"] = None
+
+    # 9. Supply alert: pre-computed affected patient estimate
+    if kind == "supply_alert":
+        active_count = cust_agg.get("active_count") or 0
+        payload_counts = trigger.get("payload", {})
+        direct = payload_counts.get("affected_patient_count") or payload_counts.get("affected_customers")
+        if direct:
+            facts["supply_alert_patient_estimate"] = int(direct)
+        elif active_count:
+            facts["supply_alert_patient_estimate"] = max(1, round(int(active_count) * 0.15))
+        else:
+            facts["supply_alert_patient_estimate"] = None
+    else:
+        facts["supply_alert_patient_estimate"] = None
+
     return facts
+
+
+_CTA_FORCED = {
+    "recall_due": "reply_1_2",
+    "appointment_tomorrow": "none",
+}
+_CTA_OPEN_ENDED_KINDS = {"research_digest", "cde_opportunity", "curious_ask_due"}
+_CTA_ACTION_KINDS = {
+    "perf_dip", "perf_spike", "renewal_due", "winback_eligible", "regulation_change",
+    "dormant_with_vera", "competitor_opened", "active_planning_intent", "seasonal_perf_dip",
+    "customer_lapsed_hard", "trial_followup", "supply_alert", "chronic_refill_due",
+    "gbp_unverified", "customer_lapsed_soft", "intent_yes_followthrough",
+    "review_theme_emerged", "festival_upcoming", "milestone_reached",
+    "wedding_package_followup", "category_seasonal",
+}
+_VALID_CTA = {"open_ended", "yes_stop", "none", "reply_1_2"}
+
+
+def _coerce_cta(output: dict, trigger: dict) -> dict:
+    kind = trigger.get("kind", "")
+    cta = output.get("cta", "")
+    if kind in _CTA_FORCED:
+        output["cta"] = _CTA_FORCED[kind]
+    elif kind in _CTA_OPEN_ENDED_KINDS and cta not in _VALID_CTA:
+        output["cta"] = "open_ended"
+    elif kind in _CTA_ACTION_KINDS and cta not in _VALID_CTA:
+        output["cta"] = "yes_stop"
+    elif cta not in _VALID_CTA:
+        output["cta"] = "yes_stop"
+    return output
 
 
 def _call_llm(user_prompt: str) -> str:
@@ -201,4 +265,5 @@ def compose(
             raw2 = raw2.strip()
         result = json.loads(raw2)
 
+    _coerce_cta(result, trigger_payload)
     return result
