@@ -13,7 +13,7 @@ _groq_client = None
 _openai_client = None
 
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4.1")
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 OPENAI_TIMEOUT = int(os.environ.get("OPENAI_TIMEOUT", "20"))
 
 
@@ -199,7 +199,11 @@ def _coerce_output(output: dict, trigger: dict) -> dict:
     elif cta not in _VALID_CTA:
         output["cta"] = "yes_stop"
 
-    # Fix 3: recall_due body must end with exact slot footer
+    # Fix 3: suppression_key — generate one if missing or empty
+    if not output.get("suppression_key", "").strip():
+        output["suppression_key"] = f"{kind}:{trigger.get('id', trigger.get('suppression_key', 'auto'))}"
+
+    # Fix 4: recall_due body must end with exact slot footer
     if kind == "recall_due":
         slots = trigger.get("payload", {}).get("available_slots", [])
         if len(slots) >= 2:
@@ -301,9 +305,10 @@ def compose(
             "Fix only that issue and return ONLY valid JSON."
         )
         try:
-            result = _parse(_call_llm(fix_prompt))
-            _coerce_output(result, trigger_payload)
+            retried = _parse(_call_llm(fix_prompt))
+            _coerce_output(retried, trigger_payload)
+            result = retried
         except Exception:
-            pass  # Let the caller's validate() be the final gate
+            pass  # Return best attempt; caller's validate() is the final gate
 
     return result
